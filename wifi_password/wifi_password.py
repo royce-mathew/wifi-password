@@ -7,54 +7,13 @@ of your WiFi to allow phones to easily connect
 by Siddharth Dushantha
 """
 
-import pathlib
 import sys
 import argparse
-from shutil import which
-import re
-import os
 
 import utils
-import constants
 
 __version__ = "1.1.1"
 
-def print_error(text) -> None:
-    """
-    Shows an error message and exits the program with the status code 1
-    """
-    print(f"ERROR: {text}", file=sys.stderr)
-    sys.exit(1)
-
-def get_ssid() -> str:
-    """
-    Get the SSID which the computer is currently connected to
-    """
-    platform = utils.get_platform()
-
-    if platform == constants.MAC:
-        airport = pathlib.Path(constants.AIRPORT_PATH)
-
-        if not airport.is_file():
-            print_error(f"Can't find 'airport' command at {airport}")
-        
-        ssid = utils.run_command(f"{airport} -I | awk '/ SSID/ {{print substr($0, index($0, $2))}}'")
-
-    elif platform == constants.LINUX:
-        if which("nmcli") is None:
-            print_error("Network Manager is required to run this program on Linux.")
-
-        ssid = utils.run_command("nmcli -t -f active,ssid dev wifi | egrep '^yes:' | sed 's/^yes://'")
-
-    elif platform == constants.WINDOWS:
-        ssid = utils.run_command("netsh wlan show interfaces | findstr SSID")
-
-        if ssid == "":
-            print_error("SSID was not found")
-
-        ssid = re.findall(r"[^B]SSID\s+:\s(.*)", ssid)[0]
-
-    return ssid
 
 def main() -> None:
     parser = argparse.ArgumentParser(usage="%(prog)s [options]")
@@ -87,21 +46,14 @@ def main() -> None:
         print(__version__)
         sys.exit()
 
-    wifi_dict = {}
-
     if args.list:
         profiles = utils.get_profiles()
-        wifi_dict= utils.generate_wifi_dict(profiles)
+        wifi_dict = utils.generate_wifi_dict(profiles)
         utils.print_dict(wifi_dict)
         return
 
-    if args.ssid is None:
-        args.ssid = get_ssid()
-
-    ssid = get_ssid() if not args.ssid else args.ssid.split(',')
-
-    if ssid:
-        wifi_dict = utils.generate_wifi_dict(ssid)
+    ssid = utils.get_ssid() if args.ssid is None else args.ssid.split(',')
+    wifi_dict = utils.generate_wifi_dict(ssid)
 
     if args.show_qr or args.save_qr:
         for key, value in wifi_dict.items():
