@@ -5,8 +5,18 @@ import re
 import subprocess
 import qrcode
 import colorama
+import pathlib
+from shutil import which
 
 import constants
+
+
+def print_error(text) -> None:
+    """
+    Shows an error message and exits the program with the status code 1
+    """
+    print(f"ERROR: {text}", file=sys.stderr)
+    sys.exit(1)
 
 def get_platform() -> str:
     """
@@ -24,6 +34,39 @@ def get_platform() -> str:
         return sys.platform
 
     return platforms[sys.platform]
+
+
+def get_ssid() -> str:
+    """
+    Get the SSID which the computer is currently connected to
+    """
+    platform = get_platform()
+    ssid: str = ""
+
+    if platform == constants.MAC:
+        airport = pathlib.Path(constants.AIRPORT_PATH)
+
+        if not airport.is_file():
+            print_error(f"Can't find 'airport' command at {airport}")
+        
+        ssid = run_command(f"{airport} -I | awk '/ SSID/ {{print substr($0, index($0, $2))}}'")
+
+    elif platform == constants.LINUX:
+        if which("nmcli") is None:
+            print_error("Network Manager is required to run this program on Linux.")
+
+        ssid = run_command("nmcli -t -f active,ssid dev wifi | grep -E '^yes:' | sed 's/^yes://'")
+
+    elif platform == constants.WINDOWS:
+        ssid = run_command("netsh wlan show interfaces | findstr SSID")
+
+        ssid = re.findall(r"[^B]SSID\s+:\s(.*)", ssid)[0]
+
+
+    if ssid == "":
+        print_error("SSID was not found")
+
+    return ssid
 
 def get_profiles() -> list:
     """
@@ -58,7 +101,7 @@ def get_profiles() -> list:
                     # skip the first element in data since it does not contain a valid profile returned by netsh command
                     profiles = [d.split(':')[1].strip(' .\r') for d in data[1:]]
     except Exception as ex:
-        print(f'Error: {ex}')
+        print_error(ex)
 
     return profiles
 
@@ -118,7 +161,7 @@ def get_password(ssid: str) -> str:
                 else:
                     password = ""
     except Exception as ex:
-        print(f'Error: {ex}')
+        print(ex)
 
     return password
 
@@ -198,6 +241,6 @@ def generate_qr_code(ssid: str, password: str, path: str, show_qr: bool) -> None
 
                 print(f"QR code has been saved to {path}")
             except FileNotFoundError:
-                print(f"No such file/directory: '{path}'")
+                print_error(f"No such file/directory: '{path}'")
     except Exception as ex:
-        print(f'QR Code Error: {ex}')
+        print_error(f"QR Code Error: {ex}")
